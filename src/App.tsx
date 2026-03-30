@@ -4,79 +4,49 @@ import confetti from "canvas-confetti";
 import { motion } from "framer-motion";
 import useSound from "use-sound";
 
+// Components
+import { AvatarDisplay } from "./components/AvatarDisplay";
+import { PlayerNameInput } from "./components/PlayerNameInput";
+import { AvatarPicker } from "./components/AvatarPicker";
+import { AwardsCard } from "./components/AwardsCard";
+import { ProgressCard } from "./components/ProgressCard";
+import { StatsCard } from "./components/StatsCard";
+import { DifficultySettings } from "./components/DifficultySettings";
+import { DivisionDisplay } from "./components/DivisionDisplay";
+import { TimerDisplay } from "./components/TimerDisplay";
+import { ResultInput } from "./components/ResultInput";
+import { GameButtons } from "./components/GameButtons";
+import { MessageDisplay } from "./components/MessageDisplay";
+import { HintDisplay } from "./components/HintDisplay";
+
+// Hooks
+import { usePersistence } from "./hooks/usePersistence";
+import { useVibration } from "./hooks/useVibration";
+
+// Types & Constants
+import {
+  DifficultyLevel,
+  AvatarKey,
+  GameState,
+  GameActions,
+  PersistedGameState,
+} from "./types/game.types";
+import {
+  timerByDifficulty,
+  maxQuotientByDifficulty,
+  digitPresetByDifficulty,
+} from "./constants/game.constants";
+
+// Utils
+import { generateDivision } from "./utils/math.utils";
+
+// Images & Sounds
 import avatarFImage from "./images/avatar/avatarF.png";
 import avatarMImage from "./images/avatar/avatarM.png";
 import successSfx from "./sounds/success.wav";
 import errorSfx from "./sounds/error.wav";
 import Gift from "./sounds/success.wav";
 import SuperGift from "./sounds/success.wav";
-
-const GAME_STORAGE_KEY = "division-game-state-v1";
-type DifficultyLevel = "easy" | "medium" | "hard";
-type AvatarKey = "avatarF" | "avatarM";
-
-const avatarMap: Record<AvatarKey, string> = {
-  avatarF: avatarFImage,
-  avatarM: avatarMImage,
-};
-
-const timerByDifficulty: Record<DifficultyLevel, number> = {
-  easy: 20, // es. 48÷6 → ~30s con carta e penna
-  medium: 60, // es. 144÷12 → ~60s
-  hard: 120, // es. 576÷24 → ~2 minuti
-};
-
-const maxQuotientByDifficulty: Record<DifficultyLevel, number> = {
-  easy: 9,
-  medium: 30,
-  hard: 90,
-};
-
-const digitPresetByDifficulty: Record<
-  DifficultyLevel,
-  { dividendDigits: number; divisorDigits: number }
-> = {
-  easy: { dividendDigits: 2, divisorDigits: 1 },
-  medium: { dividendDigits: 2, divisorDigits: 1 },
-  hard: { dividendDigits: 3, divisorDigits: 2 },
-};
-
-const getDigitBounds = (digits: number) => {
-  if (digits <= 1) {
-    return { min: 1, max: 9 };
-  }
-
-  return {
-    min: 10 ** (digits - 1),
-    max: 10 ** digits - 1,
-  };
-};
-
-const getRandomInt = (min: number, max: number) =>
-  Math.floor(Math.random() * (max - min + 1)) + min;
-
-type PersistedGameState = {
-  randomDividendo: number;
-  randomDivisore: number;
-  score: number;
-  rewards: number;
-  streak: number;
-  bestStreak: number;
-  correctAnswers: number;
-  wrongAnswers: number;
-  timeLeft: number;
-  isTimerActive: boolean;
-  divisionSolved: boolean;
-  message: string;
-  hint: string;
-  difficulty: DifficultyLevel;
-  dividendDigits: number;
-  divisorDigits: number;
-  avatarKey: AvatarKey;
-  playerName: string;
-  divisionChangesUsed: number;
-  lastSavedAt: number;
-};
 
 function App() {
   // --- STATI BASE ---
@@ -117,132 +87,64 @@ function App() {
   const [playGift] = useSound(Gift);
   const [playSuperGift] = useSound(SuperGift);
 
-  // --- RIPRISTINO STATO DOPO REFRESH ---
-  useEffect(() => {
-    try {
-      const rawState = localStorage.getItem(GAME_STORAGE_KEY);
-      if (!rawState) {
-        setIsHydrated(true);
-        return;
-      }
+  // --- VIBRAZIONE ---
+  const { vibrate } = useVibration();
 
-      const savedState = JSON.parse(rawState) as PersistedGameState;
-
-      setRandomDividendo(savedState.randomDividendo || 0);
-      setRandomDivisore(savedState.randomDivisore || 0);
-      setScore(savedState.score || 0);
-      setRewards(savedState.rewards || 0);
-      setStreak(savedState.streak || 0);
-      setBestStreak(savedState.bestStreak || 0);
-      setCorrectAnswers(savedState.correctAnswers || 0);
-
-      const elapsedSeconds = Math.floor(
-        (Date.now() - (savedState.lastSavedAt || Date.now())) / 1000,
-      );
-
-      if (savedState.isTimerActive) {
-        const adjustedTimeLeft = (savedState.timeLeft || 0) - elapsedSeconds;
-
-        if (adjustedTimeLeft <= 0) {
-          setTimeLeft(0);
-          setIsTimerActive(false);
-          setMessage("⏰ Tempo scaduto!");
-          setStreak(0);
-          setWrongAnswers((savedState.wrongAnswers || 0) + 1);
-          setScore(Math.max(0, (savedState.score || 0) - 1));
-          setDivisionChangesUsed(0);
-        } else {
-          setTimeLeft(adjustedTimeLeft);
-          setIsTimerActive(true);
-          setMessage(savedState.message || "");
-          setWrongAnswers(savedState.wrongAnswers || 0);
-        }
-      } else {
-        setTimeLeft(savedState.timeLeft || 10);
-        setIsTimerActive(false);
-        setMessage(savedState.message || "");
-        setWrongAnswers(savedState.wrongAnswers || 0);
-      }
-
-      setDivisionSolved(savedState.divisionSolved || false);
-      setHint(savedState.hint || "");
-
-      const savedDifficulty = savedState.difficulty || "easy";
-      setDifficulty(savedDifficulty);
-
-      const safeDividendDigits = Math.min(
-        Math.max(savedState.dividendDigits || 2, 1),
-        4,
-      );
-      const safeDivisorDigits = Math.min(
-        Math.max(savedState.divisorDigits || 1, 1),
-        safeDividendDigits,
-      );
-
-      setDividendDigits(safeDividendDigits);
-      setDivisorDigits(safeDivisorDigits);
-
-      setAvatarKey(savedState.avatarKey || "avatarF");
-      setPlayerName(savedState.playerName || "");
-      setDivisionChangesUsed(savedState.divisionChangesUsed || 0);
-    } catch {
-      localStorage.removeItem(GAME_STORAGE_KEY);
-    } finally {
-      setIsHydrated(true);
-    }
-  }, []);
-
-  // --- SALVATAGGIO STATO AUTOMATICO ---
-  useEffect(() => {
-    if (!isHydrated) return;
-
-    const stateToSave: PersistedGameState = {
-      randomDividendo,
-      randomDivisore,
-      score,
-      rewards,
-      streak,
-      bestStreak,
-      correctAnswers,
-      wrongAnswers,
-      timeLeft,
-      isTimerActive,
-      divisionSolved,
-      message,
-      hint,
-      difficulty,
-      dividendDigits,
-      divisorDigits,
-      avatarKey,
-      playerName,
-      divisionChangesUsed,
-      lastSavedAt: Date.now(),
-    };
-
-    localStorage.setItem(GAME_STORAGE_KEY, JSON.stringify(stateToSave));
-  }, [
+  // --- GAME STATE OBJECT ---
+  const gameState: GameState = {
     randomDividendo,
     randomDivisore,
+    userAnswer,
+    message,
+    hint,
+    divisionSolved,
+    shake,
     score,
     rewards,
     streak,
     bestStreak,
     correctAnswers,
     wrongAnswers,
-    timeLeft,
-    isTimerActive,
-    divisionSolved,
-    message,
-    hint,
     difficulty,
     dividendDigits,
     divisorDigits,
     avatarKey,
     playerName,
     divisionChangesUsed,
+    timeLeft,
+    isTimerActive,
     isHydrated,
-  ]);
+  };
 
+  // --- GAME ACTIONS OBJECT ---
+  const gameActions: GameActions = {
+    setRandomDividendo,
+    setRandomDivisore,
+    setUserAnswer,
+    setMessage,
+    setHint,
+    setDivisionSolved,
+    setShake,
+    setScore,
+    setRewards,
+    setStreak,
+    setBestStreak,
+    setCorrectAnswers,
+    setWrongAnswers,
+    setDifficulty,
+    setDividendDigits,
+    setDivisorDigits,
+    setAvatarKey,
+    setPlayerName,
+    setDivisionChangesUsed,
+    setTimeLeft,
+    setIsTimerActive,
+  };
+
+  // --- HOOKS ---
+  usePersistence(gameState, gameActions);
+
+  // --- EFETTI ---
   useEffect(() => {
     if (divisorDigits > dividendDigits) {
       setDivisorDigits(dividendDigits);
@@ -256,14 +158,6 @@ function App() {
     setDividendDigits(preset.dividendDigits);
     setDivisorDigits(preset.divisorDigits);
   }, [difficulty, isHydrated]);
-
-  // --- VIBRAZIONE ---
-  const vibrate = (type: any) => {
-    if (!navigator.vibrate) return;
-    type === "success"
-      ? navigator.vibrate([100, 50, 100])
-      : navigator.vibrate(200);
-  };
 
   // --- TIMER LOOP ---
   useEffect(() => {
@@ -287,7 +181,7 @@ function App() {
   }, [timeLeft, isTimerActive]);
 
   // --- GENERA DIVISIONE ---
-  const generateDivision = () => {
+  const generateDivisionHandler = () => {
     const isActiveUnsolvedDivision =
       isTimerActive && randomDividendo > 0 && !divisionSolved;
 
@@ -302,67 +196,31 @@ function App() {
       setDivisionChangesUsed(0);
     }
 
-    const effectiveDividendDigits =
-      divisorDigits === 1 && dividendDigits <= 2
-        ? getRandomInt(2, 3)
-        : dividendDigits;
+    const result = generateDivision({
+      dividendDigits,
+      divisorDigits,
+      maxQuotient: maxQuotientByDifficulty[difficulty],
+    });
 
-    const dividendRange = getDigitBounds(effectiveDividendDigits);
-    const divisorRange = getDigitBounds(divisorDigits);
-    const minDivisor = Math.max(2, divisorRange.min);
-    const maxDivisor = divisorRange.max;
-    const maxQuotient = maxQuotientByDifficulty[difficulty];
-
-    let divisore = 0;
-    let dividendo = 0;
-    let foundValidDivision = false;
-
-    for (let attempt = 0; attempt < 300; attempt += 1) {
-      const candidateDivisore = getRandomInt(minDivisor, maxDivisor);
-      const minQuotient = Math.max(
-        1,
-        Math.ceil(dividendRange.min / candidateDivisore),
-      );
-      const maxAllowedQuotient = Math.min(
-        maxQuotient,
-        Math.floor(dividendRange.max / candidateDivisore),
-      );
-
-      if (minQuotient > maxAllowedQuotient) {
-        continue;
-      }
-
-      const candidateQuotient = getRandomInt(minQuotient, maxAllowedQuotient);
-      const candidateDividendo = candidateDivisore * candidateQuotient;
-
-      divisore = candidateDivisore;
-      dividendo = candidateDividendo;
-      foundValidDivision = true;
-      break;
-    }
-
-    if (!foundValidDivision) {
+    if (!result.isValid) {
       setMessage("⚠️ Combinazione non valida, cambia cifre o livello.");
       return;
     }
 
-    setRandomDivisore(divisore);
-    setRandomDividendo(dividendo);
+    setRandomDivisore(result.divisore);
+    setRandomDividendo(result.dividendo);
     setUserAnswer("");
     setMessage("");
     setHint("");
     setDivisionSolved(false);
-
-    // TIMER RESET
     setTimeLeft(timerByDifficulty[difficulty]);
     setIsTimerActive(true);
   };
 
   // --- CONTROLLA RISULTATO ---
-  const checkResult = () => {
+  const checkResultHandler = () => {
     if (!randomDividendo) return;
 
-    // 🔒 FIX BUG punti infiniti
     if (divisionSolved) {
       setMessage("⚠️ Hai già risolto! Fai una nuova divisione.");
       return;
@@ -385,7 +243,6 @@ function App() {
       setUserAnswer("");
       setDivisionChangesUsed(0);
 
-      // STREAK
       let newStreakValue = 0;
 
       setStreak((prev) => {
@@ -400,7 +257,6 @@ function App() {
 
       setCorrectAnswers((c) => c + 1);
 
-      // SCORE
       const newScore = score + 1;
       if (newScore >= 10) {
         setScore(0);
@@ -417,7 +273,6 @@ function App() {
         setScore(newScore);
       }
 
-      // SUPER STREAK
       if (newStreakValue === 10) {
         confetti({ particleCount: 1000, spread: 200 });
         playSuperGift();
@@ -438,9 +293,13 @@ function App() {
     }
   };
 
-  const selectedAvatarImage = avatarMap[avatarKey] || avatarFImage;
-  const normalizedPlayerName = playerName.trim();
-  const changesRemaining = Math.max(0, 3 - divisionChangesUsed);
+  // --- HINT HANDLER ---
+  const handleHint = () => {
+    setHint(`Tabellina del ${randomDivisore}`);
+  };
+
+  const selectedAvatarImage =
+    avatarKey === "avatarF" ? avatarFImage : avatarMImage;
 
   return (
     <motion.div
@@ -448,222 +307,69 @@ function App() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
     >
-      {/* AVATAR */}
-      <div className="avatar">
-        <img src={selectedAvatarImage} alt="avatar selezionato" />
-        <p>
-          {message.includes("🎉")
-            ? `${normalizedPlayerName || "Grande"}!! 😍`
-            : message.includes("❌")
-              ? `${normalizedPlayerName || "Dai"} 💪`
-              : `${normalizedPlayerName ? `Forza ${normalizedPlayerName}` : "Proviamo"}! ✨`}
-        </p>
-      </div>
+      <AvatarDisplay
+        avatarSrc={selectedAvatarImage}
+        avatarAlt="avatar selezionato"
+        message={message}
+        playerName={playerName}
+      />
 
-      {/* NOME GIOCATORE */}
-      <div className="card name-card">
-        <h2>✍️ Nome</h2>
-        <input
-          className="name-input"
-          type="text"
-          value={playerName}
-          maxLength={20}
-          onChange={(e) =>
-            setPlayerName(
-              e.target.value.replace(/[^a-zA-Z0-9àèéìòùÀÈÉÌÒÙ\s'-]/g, ""),
-            )
-          }
-          placeholder="Scrivi il tuo nome"
-        />
-      </div>
+      <PlayerNameInput playerName={playerName} onNameChange={setPlayerName} />
 
-      {/* SCELTA AVATAR */}
-      <div className="card avatar-picker-card">
-        <h2>🧑 Scegli Avatar</h2>
-        <div className="avatar-options">
-          <button
-            type="button"
-            className={`avatar-option ${avatarKey === "avatarF" ? "active" : ""}`}
-            onClick={() => setAvatarKey("avatarF")}
-            aria-label="Scegli avatar F"
-          >
-            <img src={avatarFImage} alt="Avatar F" />
-          </button>
+      <AvatarPicker
+        selectedAvatar={avatarKey}
+        onAvatarSelect={setAvatarKey}
+        avatarF={avatarFImage}
+        avatarM={avatarMImage}
+      />
 
-          <button
-            type="button"
-            className={`avatar-option ${avatarKey === "avatarM" ? "active" : ""}`}
-            onClick={() => setAvatarKey("avatarM")}
-            aria-label="Scegli avatar M"
-          >
-            <img src={avatarMImage} alt="Avatar M" />
-          </button>
-        </div>
-      </div>
+      <AwardsCard rewards={rewards} />
 
-      {/* PREMI */}
-      <div className="card">
-        <h2>🏆 Premi</h2>
-        <div>{rewards} ⭐</div>
-      </div>
+      <ProgressCard score={score} />
 
-      {/* PROGRESS */}
-      <div className="card">
-        <p>{score} / 10</p>
-        <div className="bar">
-          <div style={{ width: `${score * 10}%` }} />
-        </div>
-      </div>
+      <StatsCard
+        streak={streak}
+        bestStreak={bestStreak}
+        correctAnswers={correctAnswers}
+        wrongAnswers={wrongAnswers}
+      />
 
-      {/* STATS */}
-      <div className="card">
-        <p>🔥 Vittorie Consecutive: {streak}</p>
-        <p>🏆 Record: {bestStreak}</p>
-        <p>
-          ✅ {correctAnswers} | ❌ {wrongAnswers}
-        </p>
-      </div>
+      <DifficultySettings
+        difficulty={difficulty}
+        dividendDigits={dividendDigits}
+        divisorDigits={divisorDigits}
+        onDifficultyChange={setDifficulty}
+        onDividendDigitsChange={setDividendDigits}
+        onDivisorDigitsChange={setDivisorDigits}
+      />
 
-      {/* IMPOSTAZIONI */}
-      <div className="card settings-card">
-        <h2>⚙️ Impostazioni</h2>
+      <DivisionDisplay
+        dividendo={randomDividendo}
+        divisore={randomDivisore}
+        shake={shake}
+      />
 
-        <div className="settings-grid">
-          <label className="setting-item">
-            Livello
-            <select
-              className="setting-select"
-              value={difficulty}
-              onChange={(e) => setDifficulty(e.target.value as DifficultyLevel)}
-            >
-              <option value="easy">Facile</option>
-              <option value="medium">Medio</option>
-              <option value="hard">Difficile</option>
-            </select>
-          </label>
+      <TimerDisplay timeLeft={timeLeft} />
 
-          <label className="setting-item">
-            Cifre dividendo
-            <select
-              className="setting-select"
-              value={dividendDigits}
-              disabled={difficulty === "easy"}
-              onChange={(e) => setDividendDigits(parseInt(e.target.value, 10))}
-            >
-              <option value={1}>1</option>
-              <option value={2}>2</option>
-              <option value={3}>3</option>
-              <option value={4}>4</option>
-            </select>
-          </label>
+      <ResultInput
+        userAnswer={userAnswer}
+        isTimerActive={isTimerActive}
+        onAnswerChange={setUserAnswer}
+        onEnter={checkResultHandler}
+      />
 
-          <label className="setting-item">
-            Cifre divisore
-            <select
-              className="setting-select"
-              value={divisorDigits}
-              disabled={difficulty === "easy"}
-              onChange={(e) => setDivisorDigits(parseInt(e.target.value, 10))}
-            >
-              {Array.from(
-                { length: Math.min(3, dividendDigits) },
-                (_, index) => {
-                  const digits = index + 1;
-                  return (
-                    <option key={digits} value={digits}>
-                      {digits}
-                    </option>
-                  );
-                },
-              )}
-            </select>
-          </label>
-        </div>
+      <GameButtons
+        isTimerActive={isTimerActive}
+        divisionSolved={divisionSolved}
+        divisionChangesUsed={divisionChangesUsed}
+        onCheck={checkResultHandler}
+        onHint={handleHint}
+        onNewDivision={generateDivisionHandler}
+      />
 
-        {difficulty === "easy" && (
-          <p>
-            In facile il divisore e a 1 cifra e il dividendo varia tra 2 e 3
-            cifre.
-          </p>
-        )}
-      </div>
+      <HintDisplay hint={hint} />
 
-      {/* DIVISIONE */}
-      <div className={`card ${shake ? "shake" : ""}`}>
-        <motion.div
-          key={randomDividendo}
-          className="division"
-          initial={{ scale: 0.6 }}
-          animate={{ scale: 1 }}
-        >
-          {randomDividendo || "?"} ÷ {randomDivisore || "?"}
-        </motion.div>
-      </div>
-
-      {/* TIMER */}
-      <div className="card">⏱️ {timeLeft}s</div>
-
-      {/* INPUT */}
-      <div className="card input-container">
-        <input
-          className="input"
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          value={userAnswer}
-          disabled={!isTimerActive}
-          onChange={(e) => setUserAnswer(e.target.value.replace(/[^0-9]/g, ""))}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              checkResult();
-            }
-          }}
-          placeholder="Risultato"
-        />
-      </div>
-
-      {/* BOTTONI */}
-      <div className="row">
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          className="btn primary"
-          onClick={checkResult}
-          disabled={!isTimerActive || divisionSolved}
-        >
-          Controlla
-        </motion.button>
-
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          className="btn"
-          onClick={() => setHint(`Tabellina del ${randomDivisore}`)}
-        >
-          Aiuto
-        </motion.button>
-      </div>
-
-      <button
-        className="btn primary"
-        onClick={generateDivision}
-        disabled={isTimerActive && !divisionSolved && divisionChangesUsed >= 3}
-      >
-        Nuova Divisione ({changesRemaining}/3 cambi)
-      </button>
-
-      {hint && <p className="hint">{hint}</p>}
-
-      <h3
-        style={{
-          color:
-            streak > 5
-              ? "gold"
-              : message.includes("🎉")
-                ? "#22c55e"
-                : "#ef4444",
-        }}
-      >
-        {message}
-      </h3>
+      <MessageDisplay message={message} streak={streak} />
     </motion.div>
   );
 }
