@@ -4,7 +4,7 @@ import confetti from "canvas-confetti";
 import { motion } from "framer-motion";
 import useSound from "use-sound";
 
-import avatarImage from './images/avatar/avatarF.png';
+import avatarImage from "./images/avatar/avatarF.png";
 import successSfx from "./sounds/success.wav";
 import errorSfx from "./sounds/error.wav";
 import Gift from "./sounds/success.wav";
@@ -226,9 +226,17 @@ function App() {
       <div className="card input-container">
         <input
           className="input"
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
           value={userAnswer}
           disabled={!isTimerActive}
           onChange={(e) => setUserAnswer(e.target.value.replace(/[^0-9]/g, ""))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              checkResult();
+            }
+          }}
           placeholder="Risultato"
         />
       </div>
