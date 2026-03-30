@@ -21,7 +21,6 @@ import { HintDisplay } from "./components/HintDisplay";
 import { AdaptiveSuggestion } from "./components/AdaptiveSuggestion";
 import { AIAnalytics } from "./components/AIAnalytics";
 
-
 // Hooks
 import { usePersistence } from "./hooks/usePersistence";
 import { useVibration } from "./hooks/useVibration";

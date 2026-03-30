@@ -24,7 +24,9 @@ const calculateAccuracy = (stats: AdaptiveStats): number => {
   return (stats.correctAnswers / total) * 100;
 };
 
-const calculateConfidence = (stats: AdaptiveStats): "low" | "medium" | "high" => {
+const calculateConfidence = (
+  stats: AdaptiveStats,
+): "low" | "medium" | "high" => {
   const total = stats.correctAnswers + stats.wrongAnswers;
   if (total < 5) return "low";
   if (total < 15) return "medium";
