@@ -19,9 +19,7 @@ export const AwardsCard = ({ rewards }: AwardsCardProps) => {
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 200, damping: 15 }}
       >
-        <div style={{ fontSize: "24px", fontWeight: "700" }}>
-          {rewards} ⭐
-        </div>
+        <div style={{ fontSize: "24px", fontWeight: "700" }}>{rewards} ⭐</div>
       </motion.div>
     </motion.div>
   );

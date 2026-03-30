@@ -42,7 +42,9 @@ export const StatsCard = ({
       </motion.p>
       <motion.p variants={itemVariants} style={{ fontSize: "15px" }}>
         🏆 Record:{" "}
-        <span style={{ fontWeight: "700", color: "#f59e0b" }}>{bestStreak}</span>
+        <span style={{ fontWeight: "700", color: "#f59e0b" }}>
+          {bestStreak}
+        </span>
       </motion.p>
       <motion.p
         variants={itemVariants}

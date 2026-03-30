@@ -18,10 +18,14 @@ import { ResultInput } from "./components/ResultInput";
 import { GameButtons } from "./components/GameButtons";
 import { MessageDisplay } from "./components/MessageDisplay";
 import { HintDisplay } from "./components/HintDisplay";
+import { AdaptiveSuggestion } from "./components/AdaptiveSuggestion";
+import { AIAnalytics } from "./components/AIAnalytics";
+
 
 // Hooks
 import { usePersistence } from "./hooks/usePersistence";
 import { useVibration } from "./hooks/useVibration";
+import { useAdaptiveDifficulty } from "./hooks/useAdaptiveDifficulty";
 
 // Types & Constants
 import {
@@ -143,6 +147,14 @@ function App() {
 
   // --- HOOKS ---
   usePersistence(gameState, gameActions);
+
+  // AI Adattivo
+  const adaptiveResult = useAdaptiveDifficulty(difficulty, {
+    correctAnswers,
+    wrongAnswers,
+    streak,
+    bestStreak,
+  });
 
   // --- EFETTI ---
   useEffect(() => {
@@ -334,6 +346,15 @@ function App() {
         wrongAnswers={wrongAnswers}
       />
 
+      <AIAnalytics
+        accuracy={adaptiveResult.currentAccuracy}
+        streak={streak}
+        bestStreak={bestStreak}
+        correctAnswers={correctAnswers}
+        wrongAnswers={wrongAnswers}
+        difficulty={difficulty}
+      />
+
       <DifficultySettings
         difficulty={difficulty}
         dividendDigits={dividendDigits}
@@ -341,6 +362,16 @@ function App() {
         onDifficultyChange={setDifficulty}
         onDividendDigitsChange={setDividendDigits}
         onDivisorDigitsChange={setDivisorDigits}
+      />
+
+      <AdaptiveSuggestion
+        accuracy={adaptiveResult.currentAccuracy}
+        suggestedDifficulty={adaptiveResult.suggestedDifficulty}
+        currentDifficulty={difficulty}
+        shouldAutoUpgrade={adaptiveResult.shouldAutoUpgrade}
+        shouldAutoDowngrade={adaptiveResult.shouldAutoDowngrade}
+        message={adaptiveResult.message}
+        confidence={adaptiveResult.confidence}
       />
 
       <DivisionDisplay
