@@ -4,6 +4,7 @@ import confetti from "canvas-confetti";
 import { motion } from "framer-motion";
 import useSound from "use-sound";
 
+import avatarImage from './images/avatar/avatarF.png';
 import successSfx from "./sounds/success.wav";
 import errorSfx from "./sounds/error.wav";
 import Gift from "./sounds/success.wav";
@@ -173,7 +174,7 @@ function App() {
     >
       {/* AVATAR */}
       <div className="avatar">
-        <img src="src/avatarF.png" alt="avatar" />
+        <img src={avatarImage} alt="avatar" />
         <p>
           {message.includes("🎉")
             ? "Brava!! 😍"
