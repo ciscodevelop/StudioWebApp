@@ -22,8 +22,8 @@ const avatarMap: Record<AvatarKey, string> = {
 
 const timerByDifficulty: Record<DifficultyLevel, number> = {
   easy: 20, // es. 48÷6 → ~30s con carta e penna
-  medium: 80, // es. 144÷12 → ~60s
-  hard: 140, // es. 576÷24 → ~2 minuti
+  medium: 60, // es. 144÷12 → ~60s
+  hard: 120, // es. 576÷24 → ~2 minuti
 };
 
 const maxQuotientByDifficulty: Record<DifficultyLevel, number> = {
