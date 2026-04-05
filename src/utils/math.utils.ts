@@ -17,8 +17,14 @@ export const generateDivision = (options: {
   dividendDigits: number;
   divisorDigits: number;
   maxQuotient: number;
+  minQuotient?: number; // ✅ Nuovo parametro opzionale
 }) => {
-  const { dividendDigits, divisorDigits, maxQuotient } = options;
+  const {
+    dividendDigits,
+    divisorDigits,
+    maxQuotient,
+    minQuotient = 2,
+  } = options;
 
   const effectiveDividendDigits =
     divisorDigits === 1 && dividendDigits <= 2
@@ -36,8 +42,8 @@ export const generateDivision = (options: {
 
   for (let attempt = 0; attempt < 300; attempt += 1) {
     const candidateDivisore = getRandomInt(minDivisor, maxDivisor);
-    const minQuotient = Math.max(
-      1,
+    const calculatedMinQuotient = Math.max(
+      minQuotient, // ✅ Usa il parametro minQuotient
       Math.ceil(dividendRange.min / candidateDivisore),
     );
     const maxAllowedQuotient = Math.min(
@@ -45,12 +51,20 @@ export const generateDivision = (options: {
       Math.floor(dividendRange.max / candidateDivisore),
     );
 
-    if (minQuotient > maxAllowedQuotient) {
+    if (calculatedMinQuotient > maxAllowedQuotient) {
       continue;
     }
 
-    const candidateQuotient = getRandomInt(minQuotient, maxAllowedQuotient);
+    const candidateQuotient = getRandomInt(
+      calculatedMinQuotient,
+      maxAllowedQuotient,
+    );
     const candidateDividendo = candidateDivisore * candidateQuotient;
+
+    // ✅ Verifica esplicita: dividendo NON deve mai essere uguale a divisore
+    if (candidateDividendo === candidateDivisore) {
+      continue;
+    }
 
     divisore = candidateDivisore;
     dividendo = candidateDividendo;

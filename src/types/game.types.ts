@@ -1,6 +1,36 @@
 export type DifficultyLevel = "easy" | "medium" | "hard";
 export type AvatarKey = "avatarF" | "avatarM";
 
+export type DivisionLogStatus = "completed" | "not-completed";
+export type DivisionLogReason =
+  | "correct-answer"
+  | "timeout"
+  | "changed-division";
+
+export interface DivisionLogEntry {
+  id: string;
+  startedAt: number;
+  endedAt: number;
+  durationSeconds: number;
+  difficulty: DifficultyLevel;
+  dividendDigits: number;
+  divisorDigits: number;
+  dividendo: number;
+  divisore: number;
+  correctResult: number;
+  userAnswer: string;
+  status: DivisionLogStatus;
+  reason: DivisionLogReason;
+  wrongAttempts: number;
+  hintsUsed: number;
+  divisionChangesUsed: number;
+  scoreBefore: number;
+  scoreAfter: number;
+  rewardsBefore: number;
+  rewardsAfter: number;
+  timeLeftAtEnd: number;
+}
+
 export interface PersistedGameState {
   randomDividendo: number;
   randomDivisore: number;

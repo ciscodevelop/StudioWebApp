@@ -4,18 +4,28 @@ interface DifficultySettingsProps {
   difficulty: DifficultyLevel;
   dividendDigits: number;
   divisorDigits: number;
+  isLocked: boolean;
+  unlockPassword: string;
+  unlockError: string;
   onDifficultyChange: (difficulty: DifficultyLevel) => void;
   onDividendDigitsChange: (digits: number) => void;
   onDivisorDigitsChange: (digits: number) => void;
+  onUnlockPasswordChange: (value: string) => void;
+  onUnlock: () => void;
 }
 
 export const DifficultySettings = ({
   difficulty,
   dividendDigits,
   divisorDigits,
+  isLocked,
+  unlockPassword,
+  unlockError,
   onDifficultyChange,
   onDividendDigitsChange,
   onDivisorDigitsChange,
+  onUnlockPasswordChange,
+  onUnlock,
 }: DifficultySettingsProps) => {
   const dividendOptions = difficulty === "medium" ? [2, 3, 4] : [1, 2, 3, 4];
 
@@ -29,6 +39,7 @@ export const DifficultySettings = ({
           <select
             className="setting-select"
             value={difficulty}
+            disabled={isLocked}
             onChange={(e) =>
               onDifficultyChange(e.target.value as DifficultyLevel)
             }
@@ -44,7 +55,7 @@ export const DifficultySettings = ({
           <select
             className="setting-select"
             value={dividendDigits}
-            disabled={difficulty === "easy"}
+            disabled={difficulty === "easy" || isLocked}
             onChange={(e) =>
               onDividendDigitsChange(parseInt(e.target.value, 10))
             }
@@ -62,7 +73,7 @@ export const DifficultySettings = ({
           <select
             className="setting-select"
             value={divisorDigits}
-            disabled={difficulty === "easy"}
+            disabled={difficulty === "easy" || isLocked}
             onChange={(e) =>
               onDivisorDigitsChange(parseInt(e.target.value, 10))
             }
@@ -84,6 +95,25 @@ export const DifficultySettings = ({
           In facile il preset è fisso: divisore a 1 cifra e dividendo a 2 cifre.
           Per cambiare le cifre usa medio o difficile.
         </p>
+      )}
+
+      {isLocked && (
+        <div className="lock-box">
+          <p className="lock-box-title">
+            Modalita bloccata: Medio, dividendo 3 cifre, divisore 2 cifre.
+          </p>
+          <input
+            className="lock-box-input"
+            type="password"
+            value={unlockPassword}
+            onChange={(e) => onUnlockPasswordChange(e.target.value)}
+            placeholder="Inserisci password"
+          />
+          <button className="btn" type="button" onClick={onUnlock}>
+            Sblocca impostazioni
+          </button>
+          {unlockError && <p className="lock-box-error">{unlockError}</p>}
+        </div>
       )}
     </div>
   );

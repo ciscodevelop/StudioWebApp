@@ -1,5 +1,5 @@
 import "./App.css";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 import confetti from "canvas-confetti";
 import { motion } from "framer-motion";
@@ -21,6 +21,7 @@ import { MessageDisplay } from "./components/MessageDisplay";
 import { HintDisplay } from "./components/HintDisplay";
 import { AdaptiveSuggestion } from "./components/AdaptiveSuggestion";
 import { AIAnalytics } from "./components/AIAnalytics";
+import { DivisionLogCard } from "./components/DivisionLogCard";
 
 // Hooks
 import { usePersistence } from "./hooks/usePersistence";
@@ -33,11 +34,14 @@ import {
   AvatarKey,
   GameState,
   GameActions,
-  PersistedGameState,
+  DivisionLogEntry,
 } from "./types/game.types";
 import {
+  DIVISION_LOG_STORAGE_KEY,
+  MAX_DIVISION_LOG_ENTRIES,
   timerByDifficulty,
   maxQuotientByDifficulty,
+  minQuotientByDifficulty,
   digitPresetByDifficulty,
 } from "./constants/game.constants";
 
@@ -53,7 +57,24 @@ import errorSfx from "./sounds/error.wav";
 import Gift from "./sounds/success.wav";
 import SuperGift from "./sounds/success.wav";
 
+interface ActiveDivisionLogContext {
+  id: string;
+  startedAt: number;
+  dividendDigits: number;
+  divisorDigits: number;
+  difficulty: DifficultyLevel;
+  dividendo: number;
+  divisore: number;
+  wrongAttempts: number;
+  hintsUsed: number;
+  divisionChangesUsed: number;
+  scoreBefore: number;
+  rewardsBefore: number;
+}
+
 function App() {
+  const SETTINGS_UNLOCK_PASSWORD = "Cisco_123";
+
   // --- STATI BASE ---
   const [randomDividendo, setRandomDividendo] = useState(0);
   const [randomDivisore, setRandomDivisore] = useState(0);
@@ -74,9 +95,12 @@ function App() {
   const [wrongAnswers, setWrongAnswers] = useState(0);
 
   // --- IMPOSTAZIONI DIFFICOLTA ---
-  const [difficulty, setDifficulty] = useState<DifficultyLevel>("easy");
-  const [dividendDigits, setDividendDigits] = useState(2);
-  const [divisorDigits, setDivisorDigits] = useState(1);
+  const [difficulty, setDifficulty] = useState<DifficultyLevel>("medium");
+  const [dividendDigits, setDividendDigits] = useState(3);
+  const [divisorDigits, setDivisorDigits] = useState(2);
+  const [isSettingsLocked, setIsSettingsLocked] = useState(true);
+  const [unlockPasswordInput, setUnlockPasswordInput] = useState("");
+  const [unlockError, setUnlockError] = useState("");
   const [avatarKey, setAvatarKey] = useState<AvatarKey>("avatarF");
   const [playerName, setPlayerName] = useState("");
   const [divisionChangesUsed, setDivisionChangesUsed] = useState(0);
@@ -85,6 +109,86 @@ function App() {
   const [timeLeft, setTimeLeft] = useState(10);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [divisionLogs, setDivisionLogs] = useState<DivisionLogEntry[]>([]);
+
+  const activeDivisionLogRef = useRef<ActiveDivisionLogContext | null>(null);
+  const userAnswerRef = useRef("");
+
+  const pushDivisionLog = (entry: DivisionLogEntry) => {
+    setDivisionLogs((prevLogs) => [
+      entry,
+      ...prevLogs.slice(0, MAX_DIVISION_LOG_ENTRIES - 1),
+    ]);
+  };
+
+  const startDivisionLog = (params: {
+    dividendo: number;
+    divisore: number;
+    difficulty: DifficultyLevel;
+    dividendDigits: number;
+    divisorDigits: number;
+  }) => {
+    activeDivisionLogRef.current = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      startedAt: Date.now(),
+      dividendDigits: params.dividendDigits,
+      divisorDigits: params.divisorDigits,
+      difficulty: params.difficulty,
+      dividendo: params.dividendo,
+      divisore: params.divisore,
+      wrongAttempts: 0,
+      hintsUsed: 0,
+      divisionChangesUsed: 0,
+      scoreBefore: score,
+      rewardsBefore: rewards,
+    };
+  };
+
+  const finalizeDivisionLog = (params: {
+    status: DivisionLogEntry["status"];
+    reason: DivisionLogEntry["reason"];
+    userAnswer: string;
+    scoreAfter: number;
+    rewardsAfter: number;
+    timeLeftAtEnd: number;
+    divisionChangesUsed?: number;
+  }) => {
+    const currentLog = activeDivisionLogRef.current;
+    if (!currentLog) return;
+
+    const endedAt = Date.now();
+    const durationSeconds = Math.max(
+      0,
+      Math.round((endedAt - currentLog.startedAt) / 1000),
+    );
+
+    pushDivisionLog({
+      id: currentLog.id,
+      startedAt: currentLog.startedAt,
+      endedAt,
+      durationSeconds,
+      difficulty: currentLog.difficulty,
+      dividendDigits: currentLog.dividendDigits,
+      divisorDigits: currentLog.divisorDigits,
+      dividendo: currentLog.dividendo,
+      divisore: currentLog.divisore,
+      correctResult: currentLog.dividendo / currentLog.divisore,
+      userAnswer: params.userAnswer,
+      status: params.status,
+      reason: params.reason,
+      wrongAttempts: currentLog.wrongAttempts,
+      hintsUsed: currentLog.hintsUsed,
+      divisionChangesUsed:
+        params.divisionChangesUsed ?? currentLog.divisionChangesUsed,
+      scoreBefore: currentLog.scoreBefore,
+      scoreAfter: params.scoreAfter,
+      rewardsBefore: currentLog.rewardsBefore,
+      rewardsAfter: params.rewardsAfter,
+      timeLeftAtEnd: Math.max(0, params.timeLeftAtEnd),
+    });
+
+    activeDivisionLogRef.current = null;
+  };
 
   // --- SUONI ---
   const [playSuccess] = useSound(successSfx);
@@ -150,6 +254,30 @@ function App() {
   // --- HOOKS ---
   usePersistence(gameState, gameActions);
 
+  useEffect(() => {
+    try {
+      const rawLogs = localStorage.getItem(DIVISION_LOG_STORAGE_KEY);
+      if (!rawLogs) return;
+      const parsedLogs = JSON.parse(rawLogs) as DivisionLogEntry[];
+      if (Array.isArray(parsedLogs)) {
+        setDivisionLogs(parsedLogs.slice(0, MAX_DIVISION_LOG_ENTRIES));
+      }
+    } catch {
+      localStorage.removeItem(DIVISION_LOG_STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(
+      DIVISION_LOG_STORAGE_KEY,
+      JSON.stringify(divisionLogs),
+    );
+  }, [divisionLogs]);
+
+  useEffect(() => {
+    userAnswerRef.current = userAnswer;
+  }, [userAnswer]);
+
   // AI Adattivo
   const adaptiveResult = useAdaptiveDifficulty(difficulty, {
     correctAnswers,
@@ -157,6 +285,18 @@ function App() {
     streak,
     bestStreak,
   });
+
+  const handleUnlockSettings = () => {
+    if (unlockPasswordInput === SETTINGS_UNLOCK_PASSWORD) {
+      setIsSettingsLocked(false);
+      setUnlockPasswordInput("");
+      setUnlockError("");
+      setMessage("🔓 Impostazioni sbloccate");
+      return;
+    }
+
+    setUnlockError("Password non corretta");
+  };
 
   // --- EFETTI ---
   useEffect(() => {
@@ -166,6 +306,24 @@ function App() {
   }, [dividendDigits, divisorDigits]);
 
   useEffect(() => {
+    if (!isSettingsLocked) return;
+
+    if (difficulty !== "medium") {
+      setDifficulty("medium");
+    }
+
+    if (dividendDigits !== 3) {
+      setDividendDigits(3);
+    }
+
+    if (divisorDigits !== 2) {
+      setDivisorDigits(2);
+    }
+  }, [isSettingsLocked, difficulty, dividendDigits, divisorDigits]);
+
+  useEffect(() => {
+    if (isSettingsLocked) return;
+
     if (difficulty === "easy") {
       const preset = digitPresetByDifficulty.easy;
 
@@ -183,21 +341,56 @@ function App() {
     if (difficulty === "medium" && dividendDigits < 2) {
       setDividendDigits(2);
     }
-  }, [difficulty, dividendDigits, divisorDigits]);
+  }, [difficulty, dividendDigits, divisorDigits, isSettingsLocked]);
 
   useEffect(() => {
     if (!isHydrated) return;
+    if (isSettingsLocked) return;
 
     const preset = digitPresetByDifficulty[difficulty];
     setDividendDigits(preset.dividendDigits);
     setDivisorDigits(preset.divisorDigits);
-  }, [difficulty, isHydrated]);
+  }, [difficulty, isHydrated, isSettingsLocked]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    if (!isTimerActive || divisionSolved || randomDividendo === 0) return;
+    if (activeDivisionLogRef.current) return;
+
+    startDivisionLog({
+      dividendo: randomDividendo,
+      divisore: randomDivisore,
+      difficulty,
+      dividendDigits,
+      divisorDigits,
+    });
+  }, [
+    isHydrated,
+    isTimerActive,
+    divisionSolved,
+    randomDividendo,
+    randomDivisore,
+    difficulty,
+    dividendDigits,
+    divisorDigits,
+  ]);
 
   // --- TIMER LOOP ---
   useEffect(() => {
     if (!isTimerActive) return;
 
     if (timeLeft <= 0) {
+      const scoreAfterTimeout = rewards > 0 ? Math.max(0, score - 1) : score;
+
+      finalizeDivisionLog({
+        status: "not-completed",
+        reason: "timeout",
+        userAnswer: userAnswerRef.current,
+        scoreAfter: scoreAfterTimeout,
+        rewardsAfter: rewards,
+        timeLeftAtEnd: 0,
+      });
+
       setMessage("⏰ Tempo scaduto!");
       setWrongAnswers((w) => w + 1);
       setStreak(0);
@@ -217,7 +410,7 @@ function App() {
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [timeLeft, isTimerActive, rewards]);
+  }, [timeLeft, isTimerActive, rewards, score]);
 
   // --- GENERA DIVISIONE ---
   const generateDivisionHandler = () => {
@@ -230,6 +423,16 @@ function App() {
     }
 
     if (isActiveUnsolvedDivision) {
+      finalizeDivisionLog({
+        status: "not-completed",
+        reason: "changed-division",
+        userAnswer,
+        scoreAfter: score,
+        rewardsAfter: rewards,
+        timeLeftAtEnd: timeLeft,
+        divisionChangesUsed: divisionChangesUsed + 1,
+      });
+
       setDivisionChangesUsed((count) => count + 1);
     } else {
       setDivisionChangesUsed(0);
@@ -254,6 +457,7 @@ function App() {
         dividendDigits: digitsForGeneration.dividendDigits,
         divisorDigits: digitsForGeneration.divisorDigits,
         maxQuotient: maxQuotientByDifficulty[difficulty],
+        minQuotient: minQuotientByDifficulty[difficulty],
       });
 
       // Se invalido, riduci leggermente le cifre per la prossima iterazione
@@ -271,6 +475,7 @@ function App() {
         dividendDigits: 2,
         divisorDigits: 1,
         maxQuotient: 9,
+        minQuotient: 3,
       });
     }
 
@@ -284,6 +489,20 @@ function App() {
       setDivisionSolved(false);
       setTimeLeft(timerByDifficulty[difficulty]);
       setIsTimerActive(true);
+    });
+
+    startDivisionLog({
+      dividendo: result.dividendo,
+      divisore: result.divisore,
+      difficulty,
+      dividendDigits:
+        difficulty === "easy"
+          ? digitPresetByDifficulty.easy.dividendDigits
+          : currentDividendDigits,
+      divisorDigits:
+        difficulty === "easy"
+          ? digitPresetByDifficulty.easy.divisorDigits
+          : currentDivisorDigits,
     });
   };
 
@@ -346,6 +565,15 @@ function App() {
         }
       });
 
+      finalizeDivisionLog({
+        status: "completed",
+        reason: "correct-answer",
+        userAnswer,
+        scoreAfter: willGainReward ? 0 : newScoreValue,
+        rewardsAfter: rewards + (willGainReward ? 1 : 0),
+        timeLeftAtEnd: timeLeft,
+      });
+
       // Audio/Confetti DOPO il sync
       if (willGainReward) {
         confetti({
@@ -375,6 +603,10 @@ function App() {
       setStreak(0);
       setWrongAnswers((w) => w + 1);
 
+      if (activeDivisionLogRef.current) {
+        activeDivisionLogRef.current.wrongAttempts += 1;
+      }
+
       // ❌ Togli punti SOLO se:
       // - Hai già vinto almeno 1 stella (rewards > 0)
       // - NON sei al livello EASY
@@ -397,6 +629,10 @@ function App() {
     });
 
     setHint(aiHint);
+
+    if (activeDivisionLogRef.current) {
+      activeDivisionLogRef.current.hintsUsed += 1;
+    }
   };
 
   const selectedAvatarImage =
@@ -448,9 +684,17 @@ function App() {
         difficulty={difficulty}
         dividendDigits={dividendDigits}
         divisorDigits={divisorDigits}
+        isLocked={isSettingsLocked}
+        unlockPassword={unlockPasswordInput}
+        unlockError={unlockError}
         onDifficultyChange={setDifficulty}
         onDividendDigitsChange={setDividendDigits}
         onDivisorDigitsChange={setDivisorDigits}
+        onUnlockPasswordChange={(value) => {
+          setUnlockPasswordInput(value);
+          if (unlockError) setUnlockError("");
+        }}
+        onUnlock={handleUnlockSettings}
       />
 
       <AdaptiveSuggestion
@@ -490,6 +734,8 @@ function App() {
       <HintDisplay hint={hint} />
 
       <MessageDisplay message={message} streak={streak} />
+
+      <DivisionLogCard logs={divisionLogs} />
     </motion.div>
   );
 }
