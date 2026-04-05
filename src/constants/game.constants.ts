@@ -6,7 +6,7 @@ export const MAX_DIVISION_LOG_ENTRIES = 300;
 
 export const timerByDifficulty: Record<DifficultyLevel, number> = {
   easy: 20, // es. 48÷6
-  medium: 100, // es. 144÷12
+  medium:120, // es. 144÷12
   hard: 180, // es. 576÷24
 };
 
