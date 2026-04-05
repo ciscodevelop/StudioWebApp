@@ -15,7 +15,7 @@ export const HintDisplay = ({ hint }: HintDisplayProps) => {
           exit={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.3 }}
         >
-          💡 {hint}
+          🤖 {hint}
         </motion.p>
       )}
     </AnimatePresence>

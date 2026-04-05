@@ -1,5 +1,6 @@
 import "./App.css";
 import { useState, useEffect } from "react";
+import { flushSync } from "react-dom";
 import confetti from "canvas-confetti";
 import { motion } from "framer-motion";
 import useSound from "use-sound";
@@ -42,6 +43,7 @@ import {
 
 // Utils
 import { generateDivision } from "./utils/math.utils";
+import { generateAiHint } from "./utils/aiHint.utils";
 
 // Images & Sounds
 import avatarFImage from "./images/avatar/avatarF.png";
@@ -142,6 +144,7 @@ function App() {
     setDivisionChangesUsed,
     setTimeLeft,
     setIsTimerActive,
+    setIsHydrated,
   };
 
   // --- HOOKS ---
@@ -163,6 +166,26 @@ function App() {
   }, [dividendDigits, divisorDigits]);
 
   useEffect(() => {
+    if (difficulty === "easy") {
+      const preset = digitPresetByDifficulty.easy;
+
+      if (
+        dividendDigits !== preset.dividendDigits ||
+        divisorDigits !== preset.divisorDigits
+      ) {
+        setDividendDigits(preset.dividendDigits);
+        setDivisorDigits(preset.divisorDigits);
+      }
+
+      return;
+    }
+
+    if (difficulty === "medium" && dividendDigits < 2) {
+      setDividendDigits(2);
+    }
+  }, [difficulty, dividendDigits, divisorDigits]);
+
+  useEffect(() => {
     if (!isHydrated) return;
 
     const preset = digitPresetByDifficulty[difficulty];
@@ -178,7 +201,12 @@ function App() {
       setMessage("⏰ Tempo scaduto!");
       setWrongAnswers((w) => w + 1);
       setStreak(0);
-      setScore((s) => Math.max(0, s - 1));
+
+      // ⏰ Togli punti SOLO se hai già vinto almeno 1 stella (rewards > 0)
+      if (rewards > 0) {
+        setScore((s) => Math.max(0, s - 1));
+      }
+
       setDivisionChangesUsed(0);
       setIsTimerActive(false);
       return;
@@ -189,7 +217,7 @@ function App() {
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [timeLeft, isTimerActive]);
+  }, [timeLeft, isTimerActive, rewards]);
 
   // --- GENERA DIVISIONE ---
   const generateDivisionHandler = () => {
@@ -207,25 +235,56 @@ function App() {
       setDivisionChangesUsed(0);
     }
 
-    const result = generateDivision({
-      dividendDigits,
-      divisorDigits,
-      maxQuotient: maxQuotientByDifficulty[difficulty],
-    });
+    // 🔄 RETRY INTELLIGENTE - finché non trova una combinazione valida
+    let result = null;
+    let retryCount = 0;
+    let currentDividendDigits = dividendDigits;
+    let currentDivisorDigits = divisorDigits;
 
-    if (!result.isValid) {
-      setMessage("⚠️ Combinazione non valida, cambia cifre o livello.");
-      return;
+    while (!result?.isValid && retryCount < 5) {
+      const digitsForGeneration =
+        difficulty === "easy"
+          ? digitPresetByDifficulty.easy
+          : {
+              dividendDigits: currentDividendDigits,
+              divisorDigits: currentDivisorDigits,
+            };
+
+      result = generateDivision({
+        dividendDigits: digitsForGeneration.dividendDigits,
+        divisorDigits: digitsForGeneration.divisorDigits,
+        maxQuotient: maxQuotientByDifficulty[difficulty],
+      });
+
+      // Se invalido, riduci leggermente le cifre per la prossima iterazione
+      if (!result.isValid && currentDividendDigits > 2) {
+        currentDividendDigits = Math.max(2, currentDividendDigits - 1);
+        currentDivisorDigits = Math.max(1, currentDivisorDigits - 1);
+      }
+
+      retryCount++;
     }
 
-    setRandomDivisore(result.divisore);
-    setRandomDividendo(result.dividendo);
-    setUserAnswer("");
-    setMessage("");
-    setHint("");
-    setDivisionSolved(false);
-    setTimeLeft(timerByDifficulty[difficulty]);
-    setIsTimerActive(true);
+    // Se ancora invalido dopo retry, fallback a easy
+    if (!result?.isValid) {
+      result = generateDivision({
+        dividendDigits: 2,
+        divisorDigits: 1,
+        maxQuotient: 9,
+      });
+    }
+
+    // Ora è garantito che result.isValid === true
+    flushSync(() => {
+      setRandomDivisore(result.divisore);
+      setRandomDividendo(result.dividendo);
+      setUserAnswer("");
+      setMessage("");
+      setHint("");
+      setDivisionSolved(false);
+      setTimeLeft(timerByDifficulty[difficulty]);
+      setIsTimerActive(true);
+    });
   };
 
   // --- CONTROLLA RISULTATO ---
@@ -249,30 +308,46 @@ function App() {
       );
       confetti({ particleCount: 150, spread: 70 });
 
-      setDivisionSolved(true);
-      setIsTimerActive(false);
-      setUserAnswer("");
-      setDivisionChangesUsed(0);
-
+      // ✅ SINCRONIZZA TUTTO PER RENDERE IL PULSANTE SUBITO RESPONSIVO
       let newStreakValue = 0;
+      let willGainReward = false;
+      let willSuperStreak = false;
+      let newScoreValue = 0;
 
-      setStreak((prev) => {
-        newStreakValue = prev + 1;
+      flushSync(() => {
+        setDivisionSolved(true);
+        setIsTimerActive(false);
+        setUserAnswer("");
+        setDivisionChangesUsed(0);
 
-        if (newStreakValue > bestStreak) {
-          setBestStreak(newStreakValue);
+        setStreak((prev) => {
+          newStreakValue = prev + 1;
+          if (newStreakValue > bestStreak) {
+            setBestStreak(newStreakValue);
+          }
+          return newStreakValue;
+        });
+
+        setCorrectAnswers((c) => c + 1);
+
+        setScore((prevScore) => {
+          newScoreValue = prevScore + 1;
+          if (newScoreValue >= 10) {
+            setRewards((r) => r + 1);
+            willGainReward = true;
+            return 0;
+          } else {
+            return newScoreValue;
+          }
+        });
+
+        if (newStreakValue === 10) {
+          willSuperStreak = true;
         }
-
-        return newStreakValue;
       });
 
-      setCorrectAnswers((c) => c + 1);
-
-      const newScore = score + 1;
-      if (newScore >= 10) {
-        setScore(0);
-        setRewards((r) => r + 1);
-
+      // Audio/Confetti DOPO il sync
+      if (willGainReward) {
         confetti({
           particleCount: 600,
           spread: 180,
@@ -281,10 +356,9 @@ function App() {
         alert("🎁 Hai guadagnato una stella!");
       } else {
         playGift();
-        setScore(newScore);
       }
 
-      if (newStreakValue === 10) {
+      if (willSuperStreak) {
         confetti({ particleCount: 1000, spread: 200 });
         playSuperGift();
         alert("🔥 SUPER STREAK!");
@@ -300,13 +374,29 @@ function App() {
 
       setStreak(0);
       setWrongAnswers((w) => w + 1);
-      setScore((s) => Math.max(0, s - 1));
+
+      // ❌ Togli punti SOLO se:
+      // - Hai già vinto almeno 1 stella (rewards > 0)
+      // - NON sei al livello EASY
+      if (rewards > 0 && difficulty !== "easy") {
+        setScore((s) => Math.max(0, s - 1));
+      }
     }
   };
 
   // --- HINT HANDLER ---
   const handleHint = () => {
-    setHint(`Tabellina del ${randomDivisore}`);
+    const aiHint = generateAiHint({
+      dividend: randomDividendo,
+      divisor: randomDivisore,
+      userAnswer,
+      difficulty,
+      timeLeft,
+      wrongAnswers,
+      streak,
+    });
+
+    setHint(aiHint);
   };
 
   const selectedAvatarImage =

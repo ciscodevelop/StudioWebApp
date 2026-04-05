@@ -54,7 +54,7 @@ export const GameButtons = ({
           onClick={onHint}
           style={{ background: "#8b5cf6", color: "white" }}
         >
-          💡 Aiuto
+          🤖 Aiuto AI
         </motion.button>
       </motion.div>
 

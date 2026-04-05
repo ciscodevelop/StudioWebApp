@@ -71,4 +71,5 @@ export interface GameActions {
   setDivisionChangesUsed: (value: number | ((prev: number) => number)) => void;
   setTimeLeft: (value: number | ((prev: number) => number)) => void;
   setIsTimerActive: (value: boolean) => void;
+  setIsHydrated: (value: boolean) => void;
 }

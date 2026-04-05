@@ -17,6 +17,8 @@ export const DifficultySettings = ({
   onDividendDigitsChange,
   onDivisorDigitsChange,
 }: DifficultySettingsProps) => {
+  const dividendOptions = difficulty === "medium" ? [2, 3, 4] : [1, 2, 3, 4];
+
   return (
     <div className="card settings-card">
       <h2>⚙️ Impostazioni</h2>
@@ -47,10 +49,11 @@ export const DifficultySettings = ({
               onDividendDigitsChange(parseInt(e.target.value, 10))
             }
           >
-            <option value={1}>1</option>
-            <option value={2}>2</option>
-            <option value={3}>3</option>
-            <option value={4}>4</option>
+            {dividendOptions.map((digits) => (
+              <option key={digits} value={digits}>
+                {digits}
+              </option>
+            ))}
           </select>
         </label>
 
@@ -78,8 +81,8 @@ export const DifficultySettings = ({
 
       {difficulty === "easy" && (
         <p>
-          In facile il divisore è a 1 cifra e il dividendo varia tra 2 e 3
-          cifre.
+          In facile il preset è fisso: divisore a 1 cifra e dividendo a 2 cifre.
+          Per cambiare le cifre usa medio o difficile.
         </p>
       )}
     </div>

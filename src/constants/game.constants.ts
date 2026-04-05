@@ -4,8 +4,8 @@ export const GAME_STORAGE_KEY = "division-game-state-v1";
 
 export const timerByDifficulty: Record<DifficultyLevel, number> = {
   easy: 20, // es. 48÷6
-  medium: 60, // es. 144÷12
-  hard: 120, // es. 576÷24
+  medium: 120, // es. 144÷12
+  hard: 190, // es. 576÷24
 };
 
 export const maxQuotientByDifficulty: Record<DifficultyLevel, number> = {

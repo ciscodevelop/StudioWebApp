@@ -15,6 +15,7 @@ export const usePersistence = (state: GameState, actions: GameActions) => {
       const rawState = localStorage.getItem(GAME_STORAGE_KEY);
       if (!rawState) {
         actions.setIsTimerActive(false);
+        actions.setIsHydrated(true);
         return;
       }
 
@@ -78,6 +79,8 @@ export const usePersistence = (state: GameState, actions: GameActions) => {
       actions.setDivisionChangesUsed(savedState.divisionChangesUsed || 0);
     } catch {
       localStorage.removeItem(GAME_STORAGE_KEY);
+    } finally {
+      actions.setIsHydrated(true);
     }
   }, []);
 
